@@ -53,9 +53,9 @@ import dji.sdk.sdkmanager.DJISDKManager;
 public class MainActivity extends AppCompatActivity {
 
     // The rate at which we will run our task in seconds
-    private int telemetryTaskRateSeconds = 1;
+    private double telemetryTaskRateSeconds = 1;
     // Convert to milliseconds as this is what the timer API expects
-    private int telemetryTaskRateMs = telemetryTaskRateSeconds * 1000;
+    private double telemetryTaskRateMs = telemetryTaskRateSeconds * 1000;
     // Timer object we will use to schedule and cancel the task
     private Timer telemetryTaskTimer;
 
@@ -66,6 +66,7 @@ public class MainActivity extends AppCompatActivity {
     String hecToken = "06136b13-c8ff-4be1-861b-15dbf1baceaf";
     String hecURL = "http://" + ec2URL + ":" + hecPort + hecEndpoint;
     String metricIndex = "telemetrytest";
+    String eventIndex = "telemetryeventtest";
 
     // Queue to handle all POST requests
     RequestQueue requestQueue;
@@ -283,6 +284,9 @@ public class MainActivity extends AppCompatActivity {
             ArrayList<JSONObject> metricList = new ArrayList<JSONObject>();
             String metricListForPost = "";
 
+            JSONObject eventDataBody;
+            HashMap<String, String> eventList = new HashMap<String, String> ();
+
             @Override
             public void run() {
                 try {
@@ -301,6 +305,7 @@ public class MainActivity extends AppCompatActivity {
                     String ts = getTimestampString();
                     Log.e("Timestamp",ts);
 
+                    /** METRICS: Adding metric data to be sent to Splunk
                     metricList.add(createMetricDataBody(ts, "velocityX", MApplication.getAircraftInstance().getFlightController().getState().getVelocityX()));
                     metricList.add(createMetricDataBody(ts, "velocityY", MApplication.getAircraftInstance().getFlightController().getState().getVelocityY()));
                     metricList.add(createMetricDataBody(ts, "velocityZ", MApplication.getAircraftInstance().getFlightController().getState().getVelocityZ()));
@@ -309,17 +314,36 @@ public class MainActivity extends AppCompatActivity {
                     metricList.add(createMetricDataBody(ts, "satelliteCount", MApplication.getAircraftInstance().getFlightController().getState().getSatelliteCount()));
                     metricList.add(createMetricDataBody(ts, "ultrasonicHeight", MApplication.getAircraftInstance().getFlightController().getState().getUltrasonicHeightInMeters()));
 
-                    /** REVIEW: Might want to leave Latitude and Longitude out if we aren't going to get satellite in the conference...can make this decision when we are there */
+                    // REVIEW: Might want to leave Latitude and Longitude out if we aren't going to get satellite in the conference...can make this decision when we are there
                     metricList.add(createMetricDataBody(ts, "latitude", MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getLatitude()));
                     metricList.add(createMetricDataBody(ts, "longitude", MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getLongitude()));
 
                     /** REVIEW: This is a string. Need to send as an event to an event index...This will change the values in the POST body that we send
                      * metricList.add(createMetricDataBody(ts, "flightMode", DJISampleApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getAltitude()));
+
+                     metricListForPost = addMetricDataBody(metricList);
+                     StringRequest hecPost = createPostRequest(metricListForPost);
+
                      */
 
+                    /** EVENTS: Adding events data to be sent to Splunk */
+                    eventList.put("velocityX", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getVelocityX()));
+                    eventList.put("velocityY", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getVelocityY()));
+                    eventList.put("velocityZ", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getVelocityZ()));
+                    eventList.put("headingDirection", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftHeadDirection()));
+                    eventList.put("altitude", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getAltitude()));
+                    eventList.put("satelliteCount", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getSatelliteCount()));
+                    eventList.put("ultrasonicHeight", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getUltrasonicHeightInMeters()));
 
-                    metricListForPost = addMetricDataBody(metricList);
-                    StringRequest hecPost = createPostRequest(metricListForPost);
+                    // REVIEW: Might want to leave Latitude and Longitude out if we aren't going to get satellite in the conference...can make this decision when we are there
+                    eventList.put("latitude", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getLatitude()));
+                    eventList.put("longitude", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getLongitude()));
+
+                    // Add all values in HashMap<String, String> to a single JSON Object for the "event" field in our POST request
+                    eventDataBody = createEventDataBody(ts, eventList);
+                    // Create POST request
+                    StringRequest hecPost = createPostRequest(eventDataBody.toString());
+
 
                     // Add HTTP Post to a queue to be run by background threads
                     requestQueue.add(hecPost);
@@ -349,7 +373,7 @@ public class MainActivity extends AppCompatActivity {
             }
         };
         // Schedule the task to run at a fixed interval
-        telemetryTaskTimer.scheduleAtFixedRate(task, 0, telemetryTaskRateMs);
+        telemetryTaskTimer.scheduleAtFixedRate(task, 0, (long) telemetryTaskRateMs);
     }
 
 
@@ -384,7 +408,7 @@ public class MainActivity extends AppCompatActivity {
             metricEvent.put("event", "metric");
             metricEvent.put("source", "spark");
             metricEvent.put("host", "Goose");
-            metricEvent.put("index", "telemetrytest");
+            metricEvent.put("index", metricIndex);
 
             metricEvent.put("fields", addMetricToFields(metric_name, _value));
 
@@ -406,6 +430,43 @@ public class MainActivity extends AppCompatActivity {
 
         return temp;
     }
+
+    public JSONObject addDataToEvent(HashMap<String, String> eventList) {
+        JSONObject eventData = new JSONObject();
+        try {
+
+            /** Add Dimensions Here */
+            for (Map.Entry<String,String> entry : eventList.entrySet()) {
+                eventData.put(entry.getKey(), entry.getValue());
+            }
+
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+
+        return eventData;
+
+    }
+
+    public JSONObject createEventDataBody(String _time, HashMap<String, String> eventList) {
+        JSONObject eventData = new JSONObject();
+        try {
+            eventData.put("time", _time);
+            eventData.put("source", "spark");
+            eventData.put("host", "Goose");
+            eventData.put("index", eventIndex);
+
+            eventData.put("event", addDataToEvent(eventList));
+
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+
+        return eventData;
+    }
+
+
+
 
     /** REVIEW: Create the HTTP request and return the object so it can be addded to the Queue above */
     public StringRequest createPostRequest(final String metricListForPost){
@@ -466,6 +527,8 @@ public class MainActivity extends AppCompatActivity {
         String ts = getTimestampString();
         Log.e("Timestamp",ts);
 
+
+        /** METRIC Data Test
         // Create JSON Object to send to Metric store
         JSONObject metric;
         ArrayList<JSONObject> metricList = new ArrayList<JSONObject>();
@@ -480,6 +543,24 @@ public class MainActivity extends AppCompatActivity {
 
         metricListForPost = addMetricDataBody(metricList);
         StringRequest hecPost = createPostRequest(metricListForPost);
+         */
+
+        // Event Data Test
+        // Create JSON Object to send to Metric store
+        JSONObject eventDataBody;
+        HashMap<String, String> eventList = new HashMap<String, String> ();
+
+        eventList.put("velocityX", "123456789");
+        eventList.put("velocityY", "987654321");
+        eventList.put("velocityZ", "9997");
+        eventList.put("latitude", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getLatitude()));
+        eventList.put("longitude", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getLongitude()));
+
+        eventDataBody = createEventDataBody(ts, eventList);
+
+        StringRequest hecPost = createPostRequest(eventDataBody.toString());
+
+
 
         // Add HTTP Post to a queue to be run by background threads
         try {
