@@ -27,7 +27,6 @@ import java.util.TimerTask;
 import java.io.UnsupportedEncodingException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -37,14 +36,14 @@ import com.android.volley.RequestQueue;
 import com.android.volley.VolleyError;
 import com.android.volley.Response;
 import com.android.volley.AuthFailureError;
-import com.android.volley.VolleyLog;
-import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
 import com.android.volley.toolbox.StringRequest;
 
+import dji.common.battery.WarningRecord;
 import dji.common.error.DJIError;
 import dji.common.error.DJISDKError;
 import dji.common.battery.BatteryState;
+import dji.common.util.CommonCallbacks;
 import dji.sdk.base.BaseComponent;
 import dji.sdk.base.BaseProduct;
 import dji.sdk.sdkmanager.DJISDKInitEvent;
@@ -70,6 +69,13 @@ public class MainActivity extends AppCompatActivity {
 
     // Queue to handle all POST requests
     RequestQueue requestQueue;
+
+    // Indexed Fields
+    String aircraftSerialNumber = "N/A";
+    String batterySerialNumber = "N/A";
+
+    // Stateful Fields
+    final HashMap<String, String> batteryData = new HashMap<String, String>();
 
     private static final String TAG = MainActivity.class.getName();
     public static final String FLAG_CONNECTION_CHANGE = "dji_sdk_connection_change";
@@ -182,6 +188,7 @@ public class MainActivity extends AppCompatActivity {
                             if (djiError == DJISDKError.REGISTRATION_SUCCESS) {
                                 showToast("Register Success");
                                 DJISDKManager.getInstance().startConnectionToProduct();
+
                             } else {
                                 showToast("Register sdk fails, please check the bundle id and network connection!");
                             }
@@ -203,8 +210,14 @@ public class MainActivity extends AppCompatActivity {
                             showToast("Product Connected");
                             notifyStatusChange();
 
-                            startTelemetryTask();
+                            // Sets member variable (String) aircraftSerialNumber
+                            getAircraftSerialNumberEventData();
+                            // Sets member variable (String) batterySerialNumber
+                            getBatterySerialNumber();
+                            // Run once on first connect to build HashMap
+                            getBatteryDiagnosticEventData();
 
+                            startTelemetryTask();
                         }
                         @Override
                         public void onComponentChange(BaseProduct.ComponentKey componentKey, BaseComponent oldComponent,
@@ -279,31 +292,26 @@ public class MainActivity extends AppCompatActivity {
         telemetryTaskTimer = new Timer();
         // Create the task that we will schedule on the timer
         TimerTask task = new TimerTask() {
+
             // Create JSON Object to send to Metric store
             JSONObject metric;
             ArrayList<JSONObject> metricList = new ArrayList<JSONObject>();
             String metricListForPost = "";
 
-            JSONObject eventDataBody;
+            JSONObject eventDataBody = new JSONObject();
+            // Event Data
             HashMap<String, String> eventList = new HashMap<String, String> ();
+            // Indexed Fields
+            HashMap<String, String> fieldList = new HashMap<String, String> ();
+
+            // Initialize timestamp minute integer
+            int tsMinute = 0;
 
             @Override
             public void run() {
                 try {
-                    Log.e("VELOCITY_X", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getVelocityX()));
-                    Log.e("VELOCITY_Y", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getVelocityY()));
-                    Log.e("VELOCITY_Z", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getVelocityZ()));
-                    Log.e("HEADING_DIRECTION",String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftHeadDirection()));
-                    Log.e("ALTITUDE",String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getAltitude()));
-                    Log.e("LATITUDE",String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getLatitude()));
-                    Log.e("LONGITUDE",String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getLongitude()));
-                    Log.e("FLIGHT_MODE",String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getFlightModeString()));
-                    Log.e("SATELLITE_COUNT",String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getSatelliteCount()));
-                    Log.e("ULTRASONIC_HEIGHT",String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getUltrasonicHeightInMeters()));
-
                     // Get Time Stamp to be sent as _time for Splunk
                     String ts = getTimestampString();
-                    Log.e("Timestamp",ts);
 
                     /** METRICS: Adding metric data to be sent to Splunk
                     metricList.add(createMetricDataBody(ts, "velocityX", MApplication.getAircraftInstance().getFlightController().getState().getVelocityX()));
@@ -327,6 +335,21 @@ public class MainActivity extends AppCompatActivity {
                      */
 
                     /** EVENTS: Adding events data to be sent to Splunk */
+                    fieldList.put("aircraftSerialNumber", aircraftSerialNumber);
+                    //Get Battery Serial Number
+                    fieldList.put("batterySerialNumber", batterySerialNumber);
+
+                    // Get minute value from epoch time
+                    tsMinute = Integer.valueOf(ts.substring(ts.length()-2));
+
+                    // Add previous battery data from last minute to every event
+                    eventList.putAll(batteryData);
+                    // Trigger update of battery diagnostic once per minute
+                    if(tsMinute % 20 == 0 && tsMinute != 0) {
+                        eventList.putAll(getBatteryDiagnosticEventData());
+                        Log.e("batteryDataTest", batteryData.toString());
+                    }
+
                     eventList.put("velocityX", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getVelocityX()));
                     eventList.put("velocityY", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getVelocityY()));
                     eventList.put("velocityZ", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getVelocityZ()));
@@ -340,35 +363,16 @@ public class MainActivity extends AppCompatActivity {
                     eventList.put("longitude", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getLongitude()));
 
                     // Add all values in HashMap<String, String> to a single JSON Object for the "event" field in our POST request
-                    eventDataBody = createEventDataBody(ts, eventList);
+                    eventDataBody = createEventDataBody(ts, eventList, fieldList);
                     // Create POST request
                     StringRequest hecPost = createPostRequest(eventDataBody.toString());
 
 
                     // Add HTTP Post to a queue to be run by background threads
                     requestQueue.add(hecPost);
-                    metricList.clear();
+                    eventList.clear();
 
-                } catch (Exception e){
-                    Log.e("Trying Timer Task", e.getMessage());
-                }
-
-
-                DJISDKManager.getInstance().getProduct().getBattery().setStateCallback(new BatteryState.Callback() {
-                    @Override
-                    public void onUpdate(BatteryState batteryState) {
-                        if (batteryState == null) return;
-                        else {
-                            int charge = batteryState.getChargeRemainingInPercent();
-                            float temperature = batteryState.getTemperature();
-
-                            Log.e("Battery", String.valueOf(charge));
-                            Log.e("Temperature", String.valueOf(temperature));
-
-                        }
-                    }
-                });
-
+                } catch (Exception e){ }
 
             }
         };
@@ -380,6 +384,73 @@ public class MainActivity extends AppCompatActivity {
     protected void stopTelemetryTask() {
         // Cancel the timer and remove any queued but not yet executed tasks
         telemetryTaskTimer.cancel();
+    }
+
+    public void getAircraftSerialNumberEventData() {
+        MApplication.getAircraftInstance().getFlightController().getSerialNumber(new CommonCallbacks.CompletionCallbackWith<String>() {
+            @Override
+            public void onSuccess(String s) {
+                Log.e("AirCraftSerialNumber", s);
+               aircraftSerialNumber = s;
+            }
+
+            @Override
+            public void onFailure(DJIError djiError) {
+                Log.e("AirCraftSerialNumberE", djiError.getDescription());
+            }
+        });
+    }
+
+    public void getBatterySerialNumber() {
+        DJISDKManager.getInstance().getProduct().getBattery().getSerialNumber(new CommonCallbacks.CompletionCallbackWith<String>() {
+            @Override
+            public void onSuccess(String s) {
+                    batterySerialNumber = s;
+            }
+
+            @Override
+            public void onFailure(DJIError djiError) {
+                Log.e("BatterySerialNumberE", djiError.getDescription());
+
+            }
+        });
+    }
+
+    public HashMap<String, String> getBatteryDiagnosticEventData() {
+
+        DJISDKManager.getInstance().getProduct().getBattery().setStateCallback(new BatteryState.Callback() {
+            @Override
+            public void onUpdate(BatteryState batteryState) {
+                if (batteryState == null) return;
+                else {
+                    try {
+                        batteryData.put("batteryCharge", String.valueOf(batteryState.getChargeRemainingInPercent()));
+                        batteryData.put("batteryTemperature", String.valueOf(batteryState.getTemperature()));
+                    } catch(Exception e) {}
+                }
+            }
+        });
+
+        DJISDKManager.getInstance().getProduct().getBattery().getLatestWarningRecord(new CommonCallbacks.CompletionCallbackWith<WarningRecord>() {
+            @Override
+            public void onSuccess(WarningRecord warningRecord) {
+                try {
+                    batteryData.put("batteryIsShortCircuited", String.valueOf(warningRecord.isShortCircuited()));
+                    batteryData.put("batteryIsLowTemp", String.valueOf(warningRecord.isLowTemperature()));
+                    batteryData.put("batteryIsOverHeated", String.valueOf(warningRecord.isOverHeated()));
+                    batteryData.put("batteryDamagedCellIndex", String.valueOf(warningRecord.getDamagedCellIndex()));
+                } catch(Exception e) { }
+            }
+
+            @Override
+            public void onFailure(DJIError djiError) {
+                try {
+                    batteryData.put("fail_batteryWarnings", djiError.toString());
+                } catch(Exception e) { }
+            }
+        });
+
+        return batteryData;
     }
 
     public JSONObject addMetricToFields(String metric_name, Object _value){
@@ -434,8 +505,6 @@ public class MainActivity extends AppCompatActivity {
     public JSONObject addDataToEvent(HashMap<String, String> eventList) {
         JSONObject eventData = new JSONObject();
         try {
-
-            /** Add Dimensions Here */
             for (Map.Entry<String,String> entry : eventList.entrySet()) {
                 eventData.put(entry.getKey(), entry.getValue());
             }
@@ -448,7 +517,20 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    public JSONObject createEventDataBody(String _time, HashMap<String, String> eventList) {
+    public JSONObject convertHashMapToData(HashMap<String, String> dataHashMap) {
+        JSONObject data = new JSONObject();
+        try {
+            for (Map.Entry<String,String> entry : dataHashMap.entrySet()) {
+                data.put(entry.getKey(), entry.getValue());
+            }
+
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        return data;
+    }
+
+    public JSONObject createEventDataBody(String _time, HashMap<String, String> eventList, HashMap<String, String> fieldsList) {
         JSONObject eventData = new JSONObject();
         try {
             eventData.put("time", _time);
@@ -456,7 +538,8 @@ public class MainActivity extends AppCompatActivity {
             eventData.put("host", "Goose");
             eventData.put("index", eventIndex);
 
-            eventData.put("event", addDataToEvent(eventList));
+            eventData.put("event", convertHashMapToData(eventList));
+            eventData.put("fields", convertHashMapToData(fieldsList));
 
         } catch (JSONException e) {
             e.printStackTrace();
@@ -545,18 +628,18 @@ public class MainActivity extends AppCompatActivity {
         StringRequest hecPost = createPostRequest(metricListForPost);
          */
 
+
         // Event Data Test
         // Create JSON Object to send to Metric store
         JSONObject eventDataBody;
-        HashMap<String, String> eventList = new HashMap<String, String> ();
+        final HashMap<String, String> eventList = new HashMap<String, String> ();
+        final HashMap<String, String> fieldList = new HashMap<String, String> ();
 
         eventList.put("velocityX", "123456789");
         eventList.put("velocityY", "987654321");
-        eventList.put("velocityZ", "9997");
-        eventList.put("latitude", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getLatitude()));
-        eventList.put("longitude", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getLongitude()));
+        eventList.put("velocityZ", "9998");
 
-        eventDataBody = createEventDataBody(ts, eventList);
+        eventDataBody = createEventDataBody(ts, eventList, fieldList);
 
         StringRequest hecPost = createPostRequest(eventDataBody.toString());
 
