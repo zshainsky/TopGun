@@ -52,7 +52,7 @@ import dji.sdk.sdkmanager.DJISDKManager;
 public class MainActivity extends AppCompatActivity {
 
     // The rate at which we will run our task in seconds
-    private double telemetryTaskRateSeconds = 1;
+    private double telemetryTaskRateSeconds = .5;
     // Convert to milliseconds as this is what the timer API expects
     private double telemetryTaskRateMs = telemetryTaskRateSeconds * 1000;
     // Timer object we will use to schedule and cancel the task
@@ -65,7 +65,7 @@ public class MainActivity extends AppCompatActivity {
     String hecToken = "06136b13-c8ff-4be1-861b-15dbf1baceaf";
     String hecURL = "http://" + ec2URL + ":" + hecPort + hecEndpoint;
     String metricIndex = "telemetrytest";
-    String eventIndex = "telemetryeventtest";
+    String eventIndex = "mavericktest";
 
     // Queue to handle all POST requests
     RequestQueue requestQueue;
