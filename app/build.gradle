@@ -27,7 +27,7 @@ android {
         abortOnError false
     }
     // Please uncomment the following code if you use your own packagingOptions Configurations.
-    packagingOptions{
+    packagingOptions {
         doNotStrip "*/*/libdjivideo.so"
         doNotStrip "*/*/libSDKRelativeJNI.so"
         doNotStrip "*/*/libFlyForbid.so"
@@ -79,5 +79,6 @@ dependencies {
     implementation 'androidx.annotation:annotation:1.1.0'
 
     implementation 'com.android.volley:volley:1.1.0'
+    implementation 'com.google.android.material:material:1.0.0'
 
 }

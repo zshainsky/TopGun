@@ -68,7 +68,7 @@
             android:layout_height="18dp"/>
     </LinearLayout>
 
-
+    <!-- Saving layout for relative positioning of other layounts to the android:id="@+id/camera" -->
     <LinearLayout
         android:id="@+id/camera"
         android:layout_below="@id/signal"
@@ -78,7 +78,7 @@
         android:layout_marginTop="20dp"
         android:background="@color/dark_gray"
         android:orientation="horizontal">
-
+        <!--
         <dji.ux.widget.AutoExposureLockWidget
             android:layout_width="30dp"
             android:layout_height="30dp"/>
@@ -114,8 +114,10 @@
         <dji.ux.widget.config.CameraConfigStorageWidget
             android:layout_width="130dp"
             android:layout_height="30dp"/>
+    -->
     </LinearLayout>
 
+    <!--
     <dji.ux.widget.ManualFocusWidget
         android:layout_below="@id/camera"
         android:layout_alignLeft="@id/camera"
@@ -124,6 +126,7 @@
         android:layout_width="42dp"
         android:layout_height="218dp"
         tools:ignore="RtlHardcoded"/>
+    -->
 
     <dji.ux.widget.RemainingFlightTimeWidget
         android:layout_alignParentTop="true"
@@ -148,8 +151,7 @@
 
     </LinearLayout>
 
-
-    <!--Take off and return home buttons on left -->
+    <!-- Take off and return home buttons on left -->
     <LinearLayout
         android:layout_width="40dp"
         android:layout_height="wrap_content"
@@ -175,8 +177,7 @@
             android:layout_marginTop="12dp"
             android:background="@drawable/playback"
             android:visibility="visible"
-            android:onClick="testHTTPPost" />
-
+            android:onClick="getInputsFromUser" />
 
     </LinearLayout>
 
@@ -191,6 +192,7 @@
 
 
     <dji.ux.panel.CameraSettingExposurePanel
+        android:id="@+id/exposurePanel"
         android:layout_width="180dp"
         android:layout_below="@id/camera"
         android:layout_toLeftOf="@+id/CameraCapturePanel"
@@ -210,6 +212,7 @@
         android:visibility="invisible"
         tools:ignore="RtlHardcoded"/>
 
+
     <!-- Pre-flight checklist panel -->
     <dji.ux.panel.PreFlightCheckListPanel
         android:layout_width="400dp"
@@ -217,5 +220,27 @@
         android:layout_below="@id/signal"
         custom:excludeItem="ESCStatus"
         android:visibility="gone"/>
+    <!--
+    <LinearLayout
+            android:layout_width="25dp"
+            android:layout_height="25dp"
+            android:layout_below="@id/exposurePanel"
+            android:layout_toRightOf="@+id/exposurePanel">
 
+            <Button
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/camera_controll_exposure_mode_p"
+                android:onClick="showPopup"/>
+
+        <dji.ux.internal.SwitchButton
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:onClick="disableObsticalAvoidence"
+            />
+     </LinearLayout>
+        -->
 </RelativeLayout>
+
+
+

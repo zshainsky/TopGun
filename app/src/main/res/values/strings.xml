@@ -1,4 +1,21 @@
 <resources>
     <string name="app_name">Top Gun</string>
     <string name="action_settings">Settings</string>
+    <string name="new_game">NewGame</string>
+    <string name="help">Help</string>
+    <string name="indexName">indexName</string>
+    <string name="droneName">droneName</string>
+    <string name="isObstacleAvoidanceDisabled">isObstacleAvoidanceDisabled</string>
+    <string name="isTripodModeEnabled">isTripodModeEnabled</string>
+    <string name="disableObstacleAvoidance">Obstacle Avoidance Disabled</string>
+    <string name="enableTripodMode">Tripod Mode Enabled</string>
+    <string name="com_splunk_cong19_topgun_preferenceFlightOptions">preferenceFlightOptions</string>
+    <string-array name="indexNames">
+        <item>goosetest</item>
+        <item>mavericktest</item>
+    </string-array>
+    <string-array name="droneNames">
+    <item>Goose</item>
+    <item>Maverick</item>
+</string-array>
 </resources>
