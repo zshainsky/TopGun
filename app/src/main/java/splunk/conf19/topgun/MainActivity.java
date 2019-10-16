@@ -28,7 +28,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
@@ -57,11 +56,13 @@ import dji.common.error.DJISDKError;
 import dji.common.battery.BatteryState;
 import dji.common.flightcontroller.FlightControllerState;
 import dji.common.flightcontroller.FlightMode;
+import dji.common.flightcontroller.virtualstick.FlightControlData;
 import dji.common.util.CommonCallbacks;
 import dji.sdk.base.BaseComponent;
 import dji.sdk.base.BaseProduct;
 import dji.sdk.sdkmanager.DJISDKInitEvent;
 import dji.sdk.sdkmanager.DJISDKManager;
+import dji.ux.widget.FPVWidget;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -156,9 +157,6 @@ public class MainActivity extends AppCompatActivity {
 
         // Initialize data input variables
         initDataInputVariables();
-
-        //Initialize UI varables
-        //initUIVariables();
 
     }
 
@@ -265,6 +263,7 @@ public class MainActivity extends AppCompatActivity {
                             disableObstacleAvoidence(isObstacleAvoidanceDisabled);
 
                             // Set Flight Mode
+                            Log.e("isTripodModeEnableC", String.valueOf(isTripodModeEnabled));
                             setTripodMode(isTripodModeEnabled);
 
                             startTelemetryTask();
@@ -336,8 +335,6 @@ public class MainActivity extends AppCompatActivity {
 
     public void submit(View view) {
         Context context = this.getApplicationContext();
-//        File file= new File("/data/user/0/com.dji.sdk.sample/shared_prefs/preferenceFlightOptions.xml"); // /data/data/com.splunk.conf19/topgun/shared_prefs/X.xml
-//        file.delete(); ///data/user/0/com.dji.sdk.sample/shared_prefs/preferenceFlightOptions.xml
         SharedPreferences sharedPref = context.getSharedPreferences(getString(R.string.com_splunk_cong19_topgun_preferenceFlightOptions), Context.MODE_PRIVATE);
         SharedPreferences.Editor editor = sharedPref.edit();
 
@@ -415,6 +412,10 @@ public class MainActivity extends AppCompatActivity {
                         Log.e("batteryDataTest", batteryData.toString());
                     }
 
+                    // Determine if Tripod mode should be turned on when aircraft is flying. Enable / Disable Tripod mode if necessary
+                    sendTripodModeCommand();
+
+                    // Critical Flight values
                     eventList.put("velocityX", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getVelocityX()));
                     eventList.put("velocityY", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getVelocityY()));
                     eventList.put("velocityZ", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getVelocityZ()));
@@ -426,6 +427,13 @@ public class MainActivity extends AppCompatActivity {
                     // REVIEW: Might want to leave Latitude and Longitude out if we aren't going to get satellite in the conference...can make this decision when we are there
                     eventList.put("latitude", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getLatitude()));
                     eventList.put("longitude", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getAircraftLocation().getLongitude()));
+
+                    // Additional flight values
+                    eventList.put("flightCount", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getFlightCount()));
+                    eventList.put("flightTime", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().getFlightTimeInSeconds()));
+                    eventList.put("flightMode", MApplication.getAircraftInstance().getFlightController().getState().getFlightModeString());
+                    eventList.put("isFlying", String.valueOf(MApplication.getAircraftInstance().getFlightController().getState().isFlying()));
+                    eventList.put("isObstacleAvoidanceDisabled", String.valueOf(isObstacleAvoidanceDisabled));
 
                     // Add all values in HashMap<String, String> to a single JSON Object for the "event" field in our POST request
                     eventDataBody = createEventDataBody(ts, eventList, fieldList);
@@ -471,6 +479,23 @@ public class MainActivity extends AppCompatActivity {
         telemetryTaskTimer.cancel();
     }
 
+    public void sendTripodModeCommand() {
+        // Check if aircraft is flying then check if tripod mode is enabled and not already in tripodmode
+        if (MApplication.getAircraftInstance().getFlightController().getState().isFlying()) {
+            if (MApplication.getAircraftInstance().getFlightController().getState().getFlightMode().value() != FlightMode.TRIPOD.value()) {
+                if (isTripodModeEnabled) {
+                    setTripodMode(true);
+                    Log.e("Setting Tripod Mode", "TRUE");
+                }
+            } else {
+                if (!isTripodModeEnabled) {
+                    setTripodMode(false);
+                    Log.e("Setting Tripod Mode", "FALSE");
+                }
+            }
+        }
+    }
+
     public void initDataInputVariables() {
         Context context = this.getApplicationContext();
 //        File file= new File("/data/user/0/com.dji.sdk.sample/shared_prefs/preferenceFlightOptions.xml"); // /data/data/com.splunk.conf19/topgun/shared_prefs/X.xml
@@ -503,6 +528,7 @@ public class MainActivity extends AppCompatActivity {
                         isObstacleAvoidanceDisabled = sharedPref.getBoolean(getString(R.string.isObstacleAvoidanceDisabled), false);
                     }
                     case "isTripodModeEnabled": {
+                        Log.e("isTripodModeEnabled", String.valueOf(sharedPref.getBoolean(getString(R.string.isTripodModeEnabled),false)));
                         isTripodModeEnabled = sharedPref.getBoolean(getString(R.string.isTripodModeEnabled), true);
                     }
                     default:
@@ -557,6 +583,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void setTripodMode(boolean enabled) {
         if(isFlightControllerConnected()) {
+            Log.e("setTripodModeCon", String.valueOf(enabled));
             MApplication.getAircraftInstance().getFlightController().setTripodModeEnabled(enabled, new CommonCallbacks.CompletionCallback() {
                 @Override
                 public void onResult(DJIError djiError) {
