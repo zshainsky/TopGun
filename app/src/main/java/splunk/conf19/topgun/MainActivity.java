@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
@@ -91,14 +92,14 @@ public class MainActivity extends AppCompatActivity {
     // Input Values
     String eventIndex;
     String metricIndex;
+    String[] availableIndexes;
     String droneName;
     boolean isObstacleAvoidanceDisabled;
     boolean isTripodModeEnabled;
-    int indexNameSelection;
     int droneNameSelection;
 
+
     // UI Elements
-    Spinner indexName;
     Spinner drone;
     Switch obstacleAvoidanceSwitch;
     Switch tripodModeSwitch;
@@ -140,6 +141,8 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        Log.e("onCreate", "True");
+
         // When the compile and target version is higher than 22, please request the following permission at runtime to ensure the SDK works well.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             checkAndRequestPermissions();
@@ -153,6 +156,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         // Initialize DJI SDK Manager
+        Log.e("lopper.getmainlooper()", Looper.getMainLooper().toString());
         mHandler = new Handler(Looper.getMainLooper());
 
         // Initialize data input variables
@@ -163,8 +167,36 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         MApplication.getEventBus().unregister(this);
+        Log.e("onDestroy", "True");
 
         super.onDestroy();
+    }
+
+    @Override
+    protected void onPause() {
+        Log.e("onPause", "True");
+        super.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        Log.e("onResume", "True");
+//        mHandler = new Handler(Looper.getMainLooper());
+//        MApplication.getEventBus().register(this);
+
+        super.onResume();
+    }
+
+    @Override
+    protected void onStop() {
+        Log.e("onStop", "True");
+        super.onStop();
+    }
+
+    @Override
+    protected void onStart() {
+        Log.e("onStart", "True");
+        super.onStart();
     }
 
     /**
@@ -240,9 +272,6 @@ public class MainActivity extends AppCompatActivity {
                             showToast("Product Disconnected");
                             notifyStatusChange();
 
-                            // Re eneable obstacle avoidance
-                            //disableObstacleAvoidence(true);
-
                             stopTelemetryTask();
 
                         }
@@ -307,6 +336,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void notifyStatusChange() {
+        if (mHandler == null) {
+            Log.e("mHandler","NULL");
+        }
+
         mHandler.removeCallbacks(updateRunnable);
         MApplication.getEventBus().post(new ConnectivityChangeEvent());
 
@@ -338,22 +371,19 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences sharedPref = context.getSharedPreferences(getString(R.string.com_splunk_cong19_topgun_preferenceFlightOptions), Context.MODE_PRIVATE);
         SharedPreferences.Editor editor = sharedPref.edit();
 
-        editor.putString(getString(R.string.indexName), (String)indexName.getSelectedItem());
         editor.putString(getString(R.string.droneName), (String) drone.getSelectedItem());
         editor.putBoolean(getString(R.string.isObstacleAvoidanceDisabled), obstacleAvoidanceSwitch.isChecked());
         editor.putBoolean(getString(R.string.isTripodModeEnabled), tripodModeSwitch.isChecked());
 
-        eventIndex = (String)indexName.getSelectedItem();
         droneName = (String) drone.getSelectedItem();
-        indexNameSelection = indexName.getSelectedItemPosition();
         droneNameSelection = drone.getSelectedItemPosition();
+        eventIndex = availableIndexes[droneNameSelection];
         isObstacleAvoidanceDisabled = obstacleAvoidanceSwitch.isChecked();
         isTripodModeEnabled = tripodModeSwitch.isChecked();
 
         /** REVIEW: Does order matter here? ... Validate if this works*/
         disableObstacleAvoidence(isObstacleAvoidanceDisabled);
         setTripodMode(isTripodModeEnabled);
-
 
         editor.commit();
         setContentView(R.layout.activity_main);
@@ -363,7 +393,6 @@ public class MainActivity extends AppCompatActivity {
         Log.e("test","test");
         setContentView(R.layout.activity_data_input);
         initUIVariables();
-
     }
 
 
@@ -498,24 +527,29 @@ public class MainActivity extends AppCompatActivity {
 
     public void initDataInputVariables() {
         Context context = this.getApplicationContext();
-//        File file= new File("/data/user/0/com.dji.sdk.sample/shared_prefs/preferenceFlightOptions.xml"); // /data/data/com.splunk.conf19/topgun/shared_prefs/X.xml
-//        file.delete(); ///data/user/0/com.dji.sdk.sample/shared_prefs/preferenceFlightOptions.xml
         SharedPreferences sharedPref = context.getSharedPreferences(getString(R.string.com_splunk_cong19_topgun_preferenceFlightOptions), Context.MODE_PRIVATE);
         SharedPreferences.Editor editor = sharedPref.edit();
+        Resources res = getResources();
+        availableIndexes = res.getStringArray(R.array.indexNames);
 
-        if(sharedPref.getAll().size() != 0) {
+        if(sharedPref.getAll().size() == 0) {
+            // Initial run...set values below if nothing is set
+            droneNameSelection = 0;
+            droneName = res.getStringArray(R.array.droneNames)[droneNameSelection];
+            eventIndex = availableIndexes[droneNameSelection];
+            editor.putString(getString(R.string.droneName), droneName);
+
+            // Start enabled
+            isObstacleAvoidanceDisabled = true;
+            editor.putBoolean(getString(R.string.isObstacleAvoidanceDisabled), isObstacleAvoidanceDisabled);
+            isTripodModeEnabled = true;
+            editor.putBoolean(getString(R.string.isTripodModeEnabled), isTripodModeEnabled);
+
+        } else {
+            // App has run previously and values already exist in the sharedPref file
             for (Map.Entry<String,?> entry : sharedPref.getAll().entrySet()) {
                 System.out.println("Key = " + entry.getKey() + ", Value = " + entry.getValue());
                 switch (entry.getKey()) {
-                    case "indexName": {
-                        eventIndex = sharedPref.getString(getString(R.string.indexName), "N/A");
-                        if (eventIndex.charAt(0) == 'g' || eventIndex.charAt(0) == 'G') {
-                            indexNameSelection = 0;
-                        } else {
-                            indexNameSelection = 1;
-                        }
-
-                    }
                     case "droneName": {
                         droneName = sharedPref.getString(getString(R.string.droneName), "N/A");
                         if (droneName.charAt(0) == 'g' || droneName.charAt(0) == 'G') {
@@ -534,47 +568,24 @@ public class MainActivity extends AppCompatActivity {
                     default:
                 }
             }
-        } else {
-
-            eventIndex = "goosetest";
-            indexNameSelection = 0;
-            editor.putString(getString(R.string.indexName), eventIndex);
-
-            droneName = "Goose";
-            droneNameSelection = 0;
-            editor.putString(getString(R.string.droneName), droneName);
-
-            // Start enabled
-            isObstacleAvoidanceDisabled = true;
-            editor.putBoolean(getString(R.string.isObstacleAvoidanceDisabled), isObstacleAvoidanceDisabled);
-            isTripodModeEnabled = true;
-            editor.putBoolean(getString(R.string.isTripodModeEnabled), isTripodModeEnabled);
         }
+        // Set index name
+        eventIndex = availableIndexes[droneNameSelection];
         editor.commit();
     }
 
     public void initUIVariables()  {
-        indexName = findViewById(R.id.index);
         drone = findViewById(R.id.droneName);
         obstacleAvoidanceSwitch = findViewById(R.id.disableObstacleAvoidance);
         tripodModeSwitch = findViewById(R.id.enableTripodMode);
         submit = findViewById(R.id.submit);
 
         // Create an ArrayAdapter using the string array and a default spinner layout
-        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this, R.array.indexNames, android.R.layout.simple_spinner_item);
-        // Specify the layout to use when the list of choices appears
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        // Apply the adapter to the spinner
-        indexName.setAdapter(adapter);
-        indexName.setSelection(indexNameSelection);
-
-
-        adapter = ArrayAdapter.createFromResource(this, R.array.droneNames, android.R.layout.simple_spinner_item);
+        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this, R.array.droneNames, android.R.layout.simple_spinner_item);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         // Apply the adapter to the spinner
         drone.setAdapter(adapter);
         drone.setSelection(droneNameSelection);
-
 
         obstacleAvoidanceSwitch.setChecked(isObstacleAvoidanceDisabled);
         tripodModeSwitch.setChecked(isTripodModeEnabled);
@@ -821,9 +832,6 @@ public class MainActivity extends AppCompatActivity {
         return eventData;
     }
 
-
-
-
     /** REVIEW: Create the HTTP request and return the object so it can be addded to the Queue above */
     public StringRequest createPostRequest(final String metricListForPost){
         // metricEvent is the JSON payload to send to Splunk...
@@ -873,7 +881,6 @@ public class MainActivity extends AppCompatActivity {
         Long tsLong = System.currentTimeMillis()/1000;
         return tsLong.toString();
     }
-
 
     public void testHTTPPost(View view) {
         // Code to clear cache...using for testing...might need later
